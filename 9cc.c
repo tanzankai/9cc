@@ -166,13 +166,22 @@ Node *new_node_num(int val){
     return node;
 }
 
-// 再帰下降構文解析用の関数expr,mul,primary
+// 再帰下降構文解析用の関数expr,mul,unary,primary
 Node *expr();
 Node *mul();
+Node *unary();
 Node *primary();
 
+/* 生成規則
 
-// expr = mul ("+" mul | "-" mul)*
+expr = mul ("+" mul | "-" mul)*
+mul = unary ("*" unary | "/" unary)*
+unary = ("+" | "-")? primary
+primary = num | "(" expr ")"
+
+*/
+
+
 Node *expr(){
     Node *node = mul();
 
@@ -187,22 +196,31 @@ Node *expr(){
     }
 }
 
-// mul = primary ("*" primary | "/" primary)*
 Node *mul(){
-    Node *node = primary();
+    Node *node = unary();
 
     for(;;){
         if(consume('*')){
-            node = new_node(ND_MUL, node, primary());
+            node = new_node(ND_MUL, node, unary());
         }
         else if(consume('/')){
-            node = new_node(ND_DIV, node, primary());
+            node = new_node(ND_DIV, node, unary());
         }
         else return node;
     }
 }
 
-// primary = num | "(" expr ")"
+Node *unary(){
+    if(consume('+')){
+        return primary();
+    }
+    else if(consume('-')){
+        // 符号反転を表現するために -x を 0-x (二項の引き算)に見立てる
+        return new_node(ND_SUB, new_node_num(0), primary());
+    }
+    else return primary();
+}
+
 Node *primary(){
     // 1文字読んで "("  が来れば "(" expr ")" であることが確定
     if(consume('(')){
@@ -240,7 +258,7 @@ void gen(Node *node){
             printf("    sub rax, rdi\n");
             break;
         case ND_MUL:
-            printf("    mul rax, rdi\n");
+            printf("    imul rax, rdi\n");
             break;
         case ND_DIV:
             printf("    cqo\n");
