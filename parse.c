@@ -1,7 +1,9 @@
 #include "9cc.h"
 
 // 再帰下降構文解析用の関数はstaticにする
+static Node *stmt(Token **rest, Token *tok);
 static Node *expr(Token **rest, Token *tok);
+static Node *assign(Token **rest, Token *tok);
 static Node *equality(Token **rest, Token *tok);
 static Node *relational(Token **rest, Token *tok);
 static Node *add(Token **rest, Token *tok);
@@ -37,21 +39,47 @@ static Node *new_num(int val){
     return node;
 }
 
+// 子が識別子(終端記号)であるノードを生成
+static Node *new_var_node(char name){
+    Node *node = new_node(ND_LVAR);
+    node->name = name;
+    return node;
+}
 /* 生成規則
-優先順位は生成文法によって表現可能
+識別子identは終端記号
+代入式の追加
+複数の文(statement)を書けるようにする
 
-expr = equality
+program = stmt*
+stmt = expr ";"
+expr = assign
+assign = equality ("=" assign)?
 equality = relational ("==" relational | "!=" relational)*
 relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 add = mul ("+" mul | "-"  mul)*
 mul = unary ("*" unary | "/" unary)*
 unary = ("+" | "-") unary | primary
-primary = num | "(" expr ")"
+primary = num | ident | "(" expr ")"
 
 */
+
+static Node *stmt(Token **rest, Token *tok){
+    Node *node = new_unary(ND_EXPR, expr(&tok, tok));
+    *rest = skip(tok, ";"); // ";" をとばす
+    return node;
+}
+
+static Node *assign(Token **rest, Token *tok){
+    Node *node = equality(&tok, tok);
+    if(equal(tok, "=")){
+        node = new_binary(ND_ASSIGN, node, assign(&tok, tok->next));
+    }
+    *rest = tok;
+    return node;
+}
  
 static Node *expr(Token **rest, Token *tok){
-    return equality(&tok, tok);
+    return assign(rest, tok);
 }
 
 static Node *equality(Token **rest, Token *tok){
@@ -161,13 +189,19 @@ static Node *primary(Token **rest, Token *tok){
         return node;
     }
 
+    if(tok->kind == TK_IDENT){
+        Node *node = new_var_node(*tok->loc); // 1文字ゆえデリファレンスでOK
+        *rest = tok->next;
+        return node;
+    }
+
     error_tok(tok, "構文が正しくありません");
 }
 
-// パースの結果生成された構文木を返す
+// トークン列tokのパースの結果生成された構文木へのポインタを返す headには複数文の構文木が格納される
 Node *parse(Token *tok){
-    Node *node = expr(&tok, tok);
-    if(tok->kind != TK_EOF) error_tok(tok, "パースが完全には終了していません");
-
-    return node;
+    Node head = {};
+    Node *cur = &head;
+    while(tok->kind != TK_EOF) cur = cur->next = stmt(&tok, tok);
+    return head.next;
 }

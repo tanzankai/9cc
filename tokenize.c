@@ -91,6 +91,14 @@ Token *tokenize(char *p){
             continue;
         }
 
+        // 識別子(アルファベット小文字1文字)
+        if('a'<=*p && *p <= 'z'){
+            cur = cur->next = new_token(TK_IDENT, p, p+1);
+            cur->len = 1;
+            p += cur->len;
+            continue;
+        }
+
         // 区切り文字
         int punct_len = read_punct(p);
         if(punct_len){
